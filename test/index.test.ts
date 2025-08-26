@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { test, expect, vi } from "vitest";
+import { test, expect, vi, describe } from "vitest";
 import inRange from "in-range";
 import timeSpan from "time-span";
 import { debounce } from "../src";
@@ -136,6 +136,97 @@ test("flush method of debounced with immediate call", async () => {
   expect(fn).toHaveBeenCalledWith(3);
 });
 
+
+test("flush method of debounced with pending call", async () => {
+  const fn = vi.fn(async (value: number) => {
+    await delay(100);
+    return value;
+  });
+
+  const debounced = debounce(fn, 50)
+
+  const pending = [];
+  const flushed = [];
+
+  pending.push(debounced(1));
+  await delay(100);
+  pending.push(debounced(2));
+  flushed.push(debounced.flush());
+  pending.push(debounced(3));
+  flushed.push(debounced.flush());
+  pending.push(debounced(4));
+  pending.push(debounced(5)); // eslint-disable-line unicorn/prefer-single-call
+  await delay(200);
+  pending.push(debounced(6));
+
+  expect(await Promise.all(flushed)).toEqual([1, 3]);
+  expect(await Promise.all(pending)).toEqual([1, 1, 3, 5, 5, 6]);
+
+  await delay(200);
+
+  expect(fn.mock.calls.flat()).toEqual([1, 2, 3, 5, 6]);
+});
+
+
+test("flush method of debounced with pending call", async () => {
+  const fn = vi.fn(async (value: number) => {
+    await delay(100);
+    return value;
+  });
+
+  const debounced = debounce(fn, 50)
+
+  const pending = [];
+  const flushed = [];
+
+  pending.push(debounced(1));
+  await delay(100);
+  pending.push(debounced(2));
+  flushed.push(debounced.flush());
+  pending.push(debounced(3));
+  flushed.push(debounced.flush());
+  pending.push(debounced(4));
+  pending.push(debounced(5)); // eslint-disable-line unicorn/prefer-single-call
+  await delay(200);
+  pending.push(debounced(6));
+
+  expect(await Promise.all(flushed)).toEqual([1, 3]);
+  expect(await Promise.all(pending)).toEqual([1, 1, 3, 5, 5, 6]);
+
+  await delay(200);
+
+  expect(fn.mock.calls.flat()).toEqual([1, 2, 3, 5, 6]);
+});
+
+test("flush method of debounced with immediate pending call", async () => {
+  const fn = vi.fn(async (value: number) => {
+    await delay(100);
+    return value;
+  });
+
+  const debounced = debounce(fn, 50)
+
+  const pending = [];
+  const flushed = [];
+
+  pending.push(debounced(1));
+  await delay(100);
+  flushed.push(debounced.flush());
+  pending.push(debounced(2));
+  flushed.push(debounced.flush());
+  pending.push(debounced(3));
+  pending.push(debounced(4)); // eslint-disable-line unicorn/prefer-single-call
+  await delay(400);
+  pending.push(debounced(5));
+
+  expect(await Promise.all(flushed)).toEqual([1, 2]);
+  expect(await Promise.all(pending)).toEqual([1, 2, 4, 4, 5]);
+
+  await delay(200);
+
+  expect(fn.mock.calls.flat()).toEqual([1, 2, 4, 5]);
+});
+
 test("isPending method of debounced", async () => {
   const fn = vi.fn(async (value) => {
     await delay(50);
@@ -146,7 +237,7 @@ test("isPending method of debounced", async () => {
   const promises = [1, 2].map((value) => debounced(value));
 
   expect(debounced.isPending()).toBe(true);
-  await delay(150);
+  await delay(200);
   expect(debounced.isPending()).toBe(false);
   expect(fn).toHaveBeenCalledTimes(1);
 

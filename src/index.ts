@@ -91,6 +91,8 @@ export function debounce<ArgumentsT extends unknown[], ReturnT>(
     return currentPromise;
   };
 
+  let __onTimeout = null;
+
   const debounced = function (...args: ArgumentsT) {
     if (options.trailing) {
       trailingArgs = args;
@@ -102,8 +104,9 @@ export function debounce<ArgumentsT extends unknown[], ReturnT>(
       const shouldCallNow = !timeout && options.leading;
 
       clearTimeout(timeout);
-      timeout = setTimeout(() => {
+      timeout = setTimeout(__onTimeout = () => {
         timeout = null;
+        __onTimeout = null;
         const promise = options.leading ? leadingValue : applyFn(this, args);
         trailingArgs = null;
         for (const _resolve of resolveList) {
@@ -128,25 +131,53 @@ export function debounce<ArgumentsT extends unknown[], ReturnT>(
     }
   };
 
-  debounced.isPending = () => !!timeout;
 
-  debounced.cancel = () => {
+
+  let _currentDebounced = debounced;
+  let _currentPending = null;
+  let _flushedPending = null;
+  let _isPending = false;
+
+  const _debouncedWrapper = function() {
+    _isPending = true;
+
+
+    const pending =
+    //(_flushedPending ? _flushedPending.catch() : Promise.resolve()).then(() =>
+      _currentDebounced.apply(this, arguments)
+    //);
+
+    pending.finally(() => {
+      if (pending === _currentPending) {
+        _isPending = false;
+      }
+    });
+
+    return _currentPending = pending;
+  }
+  _debouncedWrapper.flush = async () => {
+    __onTimeout?.();
+
+    const pending = _currentPending;
+    const opts = pending ? {...options, leading: false} : options;
+
+    _currentDebounced = debounce(fn, wait, opts);
+    _currentPending = null;
+    _flushedPending = pending;
+
+
+    return pending;
+  }
+  _debouncedWrapper.isPending = () => _isPending;
+
+  _debouncedWrapper.cancel = () => {
     _clearTimeout(timeout);
     resolveList = [];
     trailingArgs = null;
+    currentPromise = null;
   };
 
-  debounced.flush = () => {
-    _clearTimeout(timeout);
-    if (!trailingArgs || currentPromise) {
-      return;
-    }
-    const args = trailingArgs;
-    trailingArgs = null;
-    return applyFn(this, args);
-  };
-
-  return debounced;
+  return _debouncedWrapper;
 }
 
 async function _applyPromised(fn: () => any, _this: unknown, args: any[]) {
